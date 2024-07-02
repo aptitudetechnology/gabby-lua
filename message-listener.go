@@ -12,7 +12,7 @@ func init() {
 }
 
 func startListening(port int) {
-	logger.debug(fmt.Sprintf("Starting listener on port %d", port))
+	logger.debug(fmt.Sprintf("Starting message listener on port %d", port))
 
 	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	panicIfErrPresent(err)

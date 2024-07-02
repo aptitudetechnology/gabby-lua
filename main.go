@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 type GabbyInfo struct {
@@ -20,8 +21,6 @@ func init() {
 }
 
 func main() {
-	logger.info("Somethin from the main")
-
 	flag.StringVar(&gabbyInfo.name, "name", getHostname(), "Choose how you will be known")
 	levelFlag := *flag.Int("logLevel", 0, "0=DEBUG 1=INFO 2=ERROR")
 	portToListen := *flag.Int("port", 8080, "Port to listen on")
@@ -32,6 +31,10 @@ func main() {
 	logger.setLevel(logLevel)
 
 	go startListening(portToListen)
+
+	go listenForBroadcastMessages()
+	time.Sleep(time.Second * 2)
+	go broadcastMessage(8080)
 
 	for {
 		message := readUserInput()
