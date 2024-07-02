@@ -14,6 +14,8 @@ const (
 	ERROR
 )
 
+const CallDepthToSkip = 2
+
 type Log struct {
 	debugLogger *log.Logger
 	infoLogger  *log.Logger
@@ -38,21 +40,26 @@ func (l *Log) setLevel(level LogLevel) {
 	l.logLevel = level
 }
 
-func (l *Log) debug(message ...any) {
+func (l *Log) debug(message string) {
 	if l.shouldLog(DEBUG) {
-		l.debugLogger.Println(message)
+		// I've been calling logger.printLn so far but the problem with println is (similar to this method 😁) it has
+		// hardcoded calldepth set to 2, which basically means that logger.go was always selected as the file name
+		// because this is on the 2nd index of the stack, therefore I found this method that gives you ability to override
+		// callDepthToSkip, since we are calling output directly setting 2 is what we want in this case, so caller of this
+		// method will be logged as a source.
+		_ = l.debugLogger.Output(CallDepthToSkip, message)
 	}
 }
 
-func (l *Log) info(message ...any) {
+func (l *Log) info(message string) {
 	if l.shouldLog(INFO) {
-		l.infoLogger.Println(message)
+		_ = l.infoLogger.Output(CallDepthToSkip, message)
 	}
 }
 
-func (l *Log) error(message ...any) {
+func (l *Log) error(message string) {
 	if l.shouldLog(ERROR) {
-		l.errorLogger.Println(message)
+		_ = l.errorLogger.Output(CallDepthToSkip, message)
 	}
 }
 
