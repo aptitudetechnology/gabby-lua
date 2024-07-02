@@ -3,26 +3,66 @@ package main
 import (
 	"fmt"
 	"net"
+	"strconv"
+	"strings"
 )
 
 const broadcastPort = 8888
+const bufferSize = 1024      // buffer size for broadcast message
+const messageDelimiter = ";" // We should make sure user nicknames does not contain this symbol
 
-// The program will broadcast what port it is using
-// TODO we should broadcast name of the device too
-func broadcastMessage(portToBroadcast int) {
+func encodeMessage(address string, port int, hostname string) []byte {
+	encodedStr := fmt.Sprintf("%s%s%d%s%s", address, messageDelimiter, port, messageDelimiter, hostname)
+	return []byte(encodedStr)
+}
+
+func decodeMessage(encoded []byte) (string, int, string) {
+	encodedStr := string(encoded)
+
+	encodedArr := strings.Split(encodedStr, messageDelimiter)
+	port, _ := strconv.Atoi(encodedArr[1])
+	return encodedArr[0], port, encodedArr[2]
+}
+
+// The function will broadcast information needed to communicate with this host
+func broadcastMessage(port int, hostname string) {
+	hostAddress := getHostIpv4Address().String()
+
 	addr := getFullBroadcastAddress()
 	logger.debug(fmt.Sprintf("sending broadcast message to: %s", addr))
 
 	udpConnection, _ := net.DialUDP("udp", nil, addr)
 
-	port := fmt.Sprintf("%d", portToBroadcast)
-	buffer := []byte(port)
+	buffer := encodeMessage(hostAddress, port, hostname)
 	_, err := udpConnection.Write(buffer)
 
 	panicIfErrPresent(err)
 }
 
-// TODO we should parse name of the device too
+func getHostIpv4Address() net.IP {
+	var wifiInterface *net.Interface
+
+	wifiInterface, _ = net.InterfaceByName("Wi-Fi") // TODO this is basically hack that only works for windows 🥲 Need to find out int name for linux too
+
+	addresses, _ := wifiInterface.Addrs()
+
+	for _, address := range addresses {
+		ipNet, ok := address.(*net.IPNet)
+		if !ok {
+			logger.error("Unknown address type:" + address.String())
+			continue
+		}
+
+		// specifically looking for ipv4
+		if ipNet.IP.To4() != nil {
+			logger.debug("Found wifi address: " + ipNet.IP.String())
+			return ipNet.IP
+		}
+	}
+
+	panic("No Wi-Fi address found")
+}
+
 func listenForBroadcastMessages() {
 	// So my initial thought was that we should listen on broadcastAddress... 😅 After giving it some thought
 	// listening to all interfaces make sense, 0.0.0.0 is kind of an alias to all network interfaces
@@ -32,10 +72,17 @@ func listenForBroadcastMessages() {
 	logger.debug(fmt.Sprintf("listening broadcast message to: %s", addr))
 
 	conn, _ := net.ListenUDP("udp", addr)
-	buffer := make([]byte, 1024)
+	// TODO I should either make sure that buffer is never longer then 1024, or I should write code for the scenario which handles bigger buffer
+	buffer := make([]byte, bufferSize)
 
 	bytesRead, _ := conn.Read(buffer)
-	logger.info(fmt.Sprintf("message: %s bytes read: %d", string(buffer[:bytesRead]), bytesRead))
+	message := string(buffer[:bytesRead])
+
+	logger.info(fmt.Sprintf("message received: %s", message))
+
+	address, port, hostname := decodeMessage(buffer[:bytesRead])
+	logger.info(fmt.Sprintf("found new host: %s:%d with nickname:%s", address, port, hostname))
+	// TODO introduce a new data structure where you will save found hosts
 }
 
 func getFullBroadcastAddress() *net.UDPAddr {

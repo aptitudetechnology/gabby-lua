@@ -34,7 +34,7 @@ func main() {
 
 	go listenForBroadcastMessages()
 	time.Sleep(time.Second * 2)
-	go broadcastMessage(8080)
+	go broadcastMessage(8080, gabbyInfo.name)
 
 	for {
 		message := readUserInput()
