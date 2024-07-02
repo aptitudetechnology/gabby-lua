@@ -12,7 +12,7 @@ func init() {
 }
 
 func startListening(port int) {
-	logger.debug("Starting listener on port", port)
+	logger.debug(fmt.Sprintf("Starting listener on port %d", port))
 
 	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	panicIfErrPresent(err)
@@ -40,5 +40,5 @@ func handleConnection(con net.Conn) {
 	}
 
 	message := string(messageHolder[:])
-	logger.debug("Message received:", message)
+	logger.debug(fmt.Sprintf("Received message: %s", message))
 }

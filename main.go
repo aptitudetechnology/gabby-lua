@@ -1,10 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"os"
-	"time"
+	"strings"
 )
 
 type GabbyInfo struct {
@@ -14,7 +15,6 @@ type GabbyInfo struct {
 var gabbyInfo GabbyInfo
 var logger Log
 
-// This function is executed before the main, Keeping it here in case I use it.
 func init() {
 	logger = *newLogger(DEBUG)
 }
@@ -32,10 +32,19 @@ func main() {
 	logger.setLevel(logLevel)
 
 	go startListening(portToListen)
+
 	for {
-		time.Sleep(time.Second * 5)
-		sendMessage(portToListen, "hello friend")
+		message := readUserInput()
+		sendMessage(portToListen, message)
 	}
+}
+
+func readUserInput() string {
+	reader := bufio.NewReader(os.Stdin)
+	line, _ := reader.ReadString('\n')
+
+	// Weirdly enough \n was present in the line and logging was going crazy, removing white space before returning
+	return strings.TrimSpace(line)
 }
 
 func getHostname() string {

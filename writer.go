@@ -13,5 +13,5 @@ func sendMessage(port int, message string) {
 	_, err = conn.Write(messageBytes)
 	panicIfErrPresent(err)
 
-	logger.debug("Message:", message, "has been sent")
+	logger.debug(fmt.Sprintf("Message %s has been sent", message))
 }
