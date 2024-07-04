@@ -18,11 +18,9 @@ type hostInfo struct {
 }
 
 var GabbiesDiscovered map[string]hostInfo
-var HostJoinEventChannel chan hostInfo
 
 func init() {
 	GabbiesDiscovered = make(map[string]hostInfo)
-	HostJoinEventChannel = make(chan hostInfo)
 }
 
 func encodeMessage(port int, hostname string) []byte {
@@ -85,8 +83,6 @@ func listenForBroadcastMessages() {
 		port: port,
 		name: hostname,
 	}
-
-	HostJoinEventChannel <- GabbiesDiscovered[hostname]
 }
 
 func getFullBroadcastAddress() *net.UDPAddr {

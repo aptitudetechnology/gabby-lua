@@ -35,7 +35,6 @@ func main() {
 
 	go discoverGabbies()
 	go letGabbiesDiscoverYou(*portToListenPointer)
-	go listenForNewHostEvents()
 
 	var peer hostInfo
 	var message string
@@ -52,6 +51,15 @@ func main() {
 			}
 			peer = targetGabby
 			message = args[1]
+		} else if strings.HasPrefix(userInput, "!") {
+			command := userInput[1:]
+			switch command {
+			case "l":
+				fmt.Println("Currently known hosts", GabbiesDiscovered)
+			default:
+				fmt.Println("Unknown command!")
+			}
+			continue
 		} else {
 			message = userInput
 		}
@@ -77,11 +85,6 @@ func letGabbiesDiscoverYou(port int) {
 		broadcastMessage(port, gabbyInfo.name)
 		time.Sleep(time.Second * 5) // broadcast once in every 30s
 	}
-}
-
-func listenForNewHostEvents() {
-	newHost := <-HostJoinEventChannel
-	fmt.Println("New host joined gabbies", newHost, "Currently known hosts", GabbiesDiscovered)
 }
 
 func readUserInput() string {
