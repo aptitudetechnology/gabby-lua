@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 type GabbyInfo struct {
@@ -28,12 +29,12 @@ func main() {
 	logLevel := LogLevel(*levelFlagPointer)
 	logger.setLevel(logLevel)
 
-	myIpv4 := getHostIpv4Address().String()
+	myIpv4 := getHostIpv4Address()
 	messageListenAddress := fmt.Sprintf("%s:%d", myIpv4, *portToListenPointer)
 	go startListeningForMessage(messageListenAddress)
 
+	go discoverGabbies()
 	go letGabbiesDiscoverYou(*portToListenPointer)
-	go listenForBroadcastMessages()
 	go listenForNewHostEvents()
 
 	var peer hostInfo
@@ -44,10 +45,21 @@ func main() {
 		userInput := readUserInput()
 		if strings.Contains(userInput, ":") {
 			args := strings.Split(userInput, ":")
-			peer = GabbiesDiscovered[args[0]]
+			targetGabby, exists := GabbiesDiscovered[args[0]]
+			if !exists {
+				fmt.Println("Invalid name!")
+				continue
+			}
+			peer = targetGabby
 			message = args[1]
 		} else {
 			message = userInput
+		}
+
+		// if peer is it's zero value, that means it's value has not been set
+		if (peer == hostInfo{}) {
+			fmt.Println("No Peer cached, prefix your message with hostname:")
+			continue
 		}
 		address := fmt.Sprintf("%s:%d", peer.ip, peer.port)
 		sendMessage(address, message)
@@ -63,6 +75,7 @@ func discoverGabbies() {
 func letGabbiesDiscoverYou(port int) {
 	for {
 		broadcastMessage(port, gabbyInfo.name)
+		time.Sleep(time.Second * 5) // broadcast once in every 30s
 	}
 }
 
