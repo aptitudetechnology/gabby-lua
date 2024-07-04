@@ -5,8 +5,8 @@ import (
 	"net"
 )
 
-func sendMessage(port int, message string) {
-	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+func sendMessage(address string, message string) {
+	conn, err := net.Dial("tcp", address)
 	panicIfErrPresent(err)
 
 	messageBytes := []byte(message)

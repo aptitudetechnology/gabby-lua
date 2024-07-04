@@ -11,6 +11,20 @@ const broadcastPort = 8888
 const bufferSize = 1024      // buffer size for broadcast message
 const messageDelimiter = ";" // We should make sure user nicknames does not contain this symbol
 
+type hostInfo struct {
+	ip   string
+	port int
+	name string
+}
+
+var GabbiesDiscovered map[string]hostInfo
+var HostJoinEventChannel chan hostInfo
+
+func init() {
+	GabbiesDiscovered = make(map[string]hostInfo)
+	HostJoinEventChannel = make(chan hostInfo)
+}
+
 func encodeMessage(address string, port int, hostname string) []byte {
 	encodedStr := fmt.Sprintf("%s%s%d%s%s", address, messageDelimiter, port, messageDelimiter, hostname)
 	return []byte(encodedStr)
@@ -42,7 +56,8 @@ func broadcastMessage(port int, hostname string) {
 func getHostIpv4Address() net.IP {
 	var wifiInterface *net.Interface
 
-	wifiInterface, _ = net.InterfaceByName("Wi-Fi") // TODO this is basically hack that only works for windows 🥲 Need to find out int name for linux too
+	wifiInterface, err := net.InterfaceByName("Wi-Fi") // TODO this is basically hack that only works for windows 🥲 Need to find out int name for linux too
+	panicIfErrPresent(err)
 
 	addresses, _ := wifiInterface.Addrs()
 
@@ -78,11 +93,19 @@ func listenForBroadcastMessages() {
 	bytesRead, _ := conn.Read(buffer)
 	message := string(buffer[:bytesRead])
 
-	logger.info(fmt.Sprintf("message received: %s", message))
+	logger.debug(fmt.Sprintf("message received: %s", message))
 
 	address, port, hostname := decodeMessage(buffer[:bytesRead])
-	logger.info(fmt.Sprintf("found new host: %s:%d with nickname:%s", address, port, hostname))
-	// TODO introduce a new data structure where you will save found hosts
+
+	logger.debug(fmt.Sprintf("found new host: %s:%d with nickname:%s", address, port, hostname))
+
+	GabbiesDiscovered[hostname] = hostInfo{
+		ip:   address,
+		port: port,
+		name: hostname,
+	}
+
+	HostJoinEventChannel <- GabbiesDiscovered[hostname]
 }
 
 func getFullBroadcastAddress() *net.UDPAddr {

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 )
 
 type GabbyInfo struct {
@@ -22,24 +21,54 @@ func init() {
 
 func main() {
 	flag.StringVar(&gabbyInfo.name, "name", getHostname(), "Choose how you will be known")
-	levelFlag := *flag.Int("logLevel", 0, "0=DEBUG 1=INFO 2=ERROR")
-	portToListen := *flag.Int("port", 8080, "Port to listen on")
+	levelFlagPointer := flag.Int("log", 0, "0=DEBUG 1=INFO 2=ERROR")
+	portToListenPointer := flag.Int("port", 8080, "Port to listen on")
 
 	flag.Parse()
-
-	logLevel := LogLevel(levelFlag)
+	logLevel := LogLevel(*levelFlagPointer)
 	logger.setLevel(logLevel)
 
-	go startListening(portToListen)
+	myIpv4 := getHostIpv4Address().String()
+	messageListenAddress := fmt.Sprintf("%s:%d", myIpv4, *portToListenPointer)
+	go startListeningForMessage(messageListenAddress)
 
+	go letGabbiesDiscoverYou(*portToListenPointer)
 	go listenForBroadcastMessages()
-	time.Sleep(time.Second * 2)
-	go broadcastMessage(8080, gabbyInfo.name)
+	go listenForNewHostEvents()
 
+	var peer hostInfo
+	var message string
+
+	fmt.Println("[hostname]:Message for example: jimmy:Hello there friend")
 	for {
-		message := readUserInput()
-		sendMessage(portToListen, message)
+		userInput := readUserInput()
+		if strings.Contains(userInput, ":") {
+			args := strings.Split(userInput, ":")
+			peer = GabbiesDiscovered[args[0]]
+			message = args[1]
+		} else {
+			message = userInput
+		}
+		address := fmt.Sprintf("%s:%d", peer.ip, peer.port)
+		sendMessage(address, message)
 	}
+}
+
+func discoverGabbies() {
+	for {
+		listenForBroadcastMessages()
+	}
+}
+
+func letGabbiesDiscoverYou(port int) {
+	for {
+		broadcastMessage(port, gabbyInfo.name)
+	}
+}
+
+func listenForNewHostEvents() {
+	newHost := <-HostJoinEventChannel
+	fmt.Println("New host joined gabbies", newHost, "Currently known hosts", GabbiesDiscovered)
 }
 
 func readUserInput() string {

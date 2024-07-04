@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net"
+	"strings"
 )
 
 var defaultBufferSize int
@@ -11,10 +12,8 @@ func init() {
 	defaultBufferSize = 1024
 }
 
-func startListening(port int) {
-	logger.debug(fmt.Sprintf("Starting message listener on port %d", port))
-
-	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+func startListeningForMessage(address string) {
+	listener, err := net.Listen("tcp", address)
 	panicIfErrPresent(err)
 
 	for {
@@ -40,5 +39,20 @@ func handleConnection(con net.Conn) {
 	}
 
 	message := string(messageHolder[:])
-	logger.debug(fmt.Sprintf("Received message: %s", message))
+	remoteName := lookupNameOfHost(con.RemoteAddr())
+	fmt.Printf("[%s]-->%s", remoteName, message)
+	fmt.Println()
+}
+
+func lookupNameOfHost(remoteAddr net.Addr) string {
+	parts := strings.Split(remoteAddr.String(), ":")
+	host := parts[0] // ignore the ephemeral port
+
+	for _, gabby := range GabbiesDiscovered {
+		if gabby.ip == host {
+			return gabby.name
+		}
+	}
+
+	return "Unknown"
 }
