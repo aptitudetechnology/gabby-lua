@@ -1,50 +1,52 @@
-# Gabby - P2P Chat Application
 
-Gabby is a peer-to-peer chat application written in Go. It allows users to discover and communicate with each other on a
-local network using UDP broadcasts and TCP connections.
+# GabbyLua
+
+A Lua-based P2P chat application refactored from Go, supporting UDP peer discovery and TCP direct messaging.
+
 
 ## Features
+- Peer discovery via UDP broadcast
+- Direct messaging via TCP
+- Interactive CLI
+- Peer management
+- Custom logger
+- Configurable settings
 
-- Automatic peer discovery using UDP broadcasts
-- Direct messaging between peers
-- Command-line interface for interaction
-- Configurable logging levels
 
-## Usage
+## Getting Started
 
-1. Build the application: ```go build -o gabby```
-2. Run the application: ```./gabby -name YourName -port 8080 -log 0```
-   Options:
+### 1. Install Dependencies
 
-- `-name`: Your display name (default: system hostname)
-- `-port`: Port to listen on for incoming messages (default: 8080)
-- `-log`: Logging level (0=DEBUG, 1=INFO, 2=ERROR, default: 0)
+You need Lua 5.3+ and the following modules:
 
-3. Commands:
+```bash
+luarocks install luasocket
+luarocks install lua-cjson
+```
 
-- Send a message: `PeerName:Your message here`
-- List known peers: `!l`
+### 2. Run GabbyLua
 
-## How It Works
+Start the application:
 
-- The application uses UDP broadcasts on port 8888 for peer discovery.
-- Direct messages are sent using TCP connections.
-- Peers are automatically discovered and added to a list of known hosts.
+```bash
+lua main.lua
+```
 
-## Notes
+### 3. CLI Commands
+- `peers` — List discovered peers
+- `send <ip> <port> <message>` — Send message to peer
+- `quit` — Exit
+- `help` — Show commands
 
-- Ensure your firewall allows UDP broadcasts and incoming TCP connections on the specified port.
-- The application is designed for use on local networks.
 
-## Limitations
+## File Structure
+- `main.lua` — Entry point
+- `discovery_service.lua` — UDP broadcast logic
+- `message_listener.lua` — TCP message receiving
+- `message_writer.lua` — TCP message sending
+- `logger.lua` — Logging system
+- `config.lua` — Configuration
 
-This project was primarily developed as a learning exercise to gain familiarity with Go programming. As such, there are
-several areas that could be optimized or improved:
 
-- Peer availability checks
-- Handling of username uniqueness
-- More robust error handling and recovery
-- Improved network efficiency
-
-However, as the main purpose of this project was educational, no further optimizations are planned at this time. The
-current implementation serves as a functional demonstration of peer-to-peer networking concepts in Go.
+## License
+MIT
