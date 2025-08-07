@@ -1,5 +1,7 @@
 # Refactoring Gabby from Go to Lua: Complete Guide
 
+note the files from the go version are in the "gofiles" folder.
+
 ## Project Overview
 Refactor the existing Go-based P2P chat application "Gabby" to Lua while maintaining all core functionality and improving where possible.
 
