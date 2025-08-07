@@ -1,11 +1,13 @@
 -- main.lua
 -- Entry point for Gabby Lua P2P chat
 
+
 local config = require("config")
 local logger = require("logger")
 local discovery = require("discovery_service")
 local listener = require("message_listener")
 local writer = require("message_writer")
+local socket = require("socket")
 
 local peers = {}
 local hostname = socket.dns.gethostname() or "unknown"
