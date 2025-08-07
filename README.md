@@ -24,6 +24,9 @@ luarocks install luasocket
 luarocks install lua-cjson
 ```
 
+or chmod +x install-dependencies.sh
+./ininstall-dependencies.sh
+
 ### 2. Run GabbyLua
 
 Start the application:
