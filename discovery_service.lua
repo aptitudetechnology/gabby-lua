@@ -4,7 +4,7 @@
 local socket = require("socket")
 local config = require("config")
 local logger = require("logger")
-local cjson = require("cjson.safe")
+local cjson = require("cjson")
 
 local discovery = {}
 
