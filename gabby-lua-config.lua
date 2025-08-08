@@ -1,3 +1,9 @@
+-- config.lua: Configuration file for gabby-lua, a P2P chat application with planned SDR and modem testing capabilities.
+-- This file defines settings for TCP-based messaging, UDP-based peer discovery and messaging, logging, and a plug-in architecture
+-- for Software-Defined Radio (SDR) support. The SDR plug-in functionality, including dynamic loading of SDR modules (e.g., RTL-SDR,
+-- HackRF, custom modem) for JSON-over-UDP signal transmission, is planned but not yet implemented. Existing chat functionality
+-- (peer discovery, direct messaging, CLI) is fully supported, with UDP messaging and SDR features to be added in future updates.
+
 local config = {
     -- TCP settings for legacy and JSON-based chat messaging
     TCP_PORT = 12345, -- Port for TCP message listener (message_listener.lua)
