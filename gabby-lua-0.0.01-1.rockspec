@@ -4,6 +4,12 @@ source = {
    url = "file://",
    dir = "."
 }
+package = "gabby-lua"
+version = "0.1.0-1"
+source = {
+   url = "https://github.com/aptitudetechnology/gabby-lua/archive/refs/tags/v0.1.0.tar.gz",
+   dir = "gabby-lua-0.1.0"
+}
 description = {
    summary = "GabbyLua - P2P Chat with UDP Discovery (Development Version)",
    detailed = [[
@@ -25,10 +31,10 @@ dependencies = {
 build = {
    type = "builtin",
    modules = {
-      ["gabby.config"] = "config.lua",
-      ["gabby.discovery"] = "discovery_service.lua",
-      ["gabby.listener"] = "message_listener.lua",
-      ["gabby.writer"] = "message_writer.lua"
+      ["config"] = "config.lua",
+      ["discovery_service"] = "discovery_service.lua",
+      ["message_listener"] = "message_listener.lua",
+      ["message_writer"] = "message_writer.lua"
    },
    copy_directories = { "gofiles" }
 }
