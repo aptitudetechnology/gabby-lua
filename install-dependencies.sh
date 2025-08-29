@@ -14,6 +14,7 @@ sudo apt-get install -y lua5.3 luarocks liblua5.3-dev
 # Install LuaSocket and lua-cjson for Lua 5.3
 sudo luarocks install luasocket --lua-version=5.3
 sudo luarocks install lua-cjson --lua-version=5.3
+sudo luarocks install ansicolors --lua-version=5.3
 
 echo "All dependencies installed successfully."
 echo
