@@ -1,7 +1,6 @@
 #!/usr/bin/env lua
--- test_gabby.lua
--- Comprehensive continuous test script for GabbyLua P2P chat application
--- Tests UDP discovery (9001), TCP messaging (9002), and UDP messaging (9003)
+-- test_gabby_v2.lua
+-- Enhanced continuous test script for GabbyLua P2P chat
 
 local socket = require("socket")
 local json = require("cjson")
@@ -10,141 +9,129 @@ local colors = require("ansicolors")
 -- Import GabbyLua modules
 local config = require("config")
 local logger = require("logger")
-local message_writer = require("message_writer")
 
--- Test configuration
+-- Configuration with fallbacks
 local TEST_CONFIG = {
-    DISCOVERY_INTERVAL = 5,     -- seconds
-    TCP_TEST_INTERVAL = 10,     -- seconds
-    UDP_TEST_INTERVAL = 7,      -- seconds
-    DISPLAY_REFRESH = 1,        -- seconds
-    PEER_TIMEOUT = 30,          -- seconds
+    DISCOVERY_INTERVAL = 5,
+    TCP_TEST_INTERVAL = 10,
+    UDP_TEST_INTERVAL = 7,
+    DISPLAY_REFRESH = 1,
+    PEER_TIMEOUT = 30,
     UDP_DISCOVERY_PORT = config.UDP_PORT or 9001,
     TCP_MESSAGE_PORT = config.TCP_PORT or 9002,
-    UDP_MESSAGE_PORT = 9003,    -- New UDP messaging port
-    MAX_MESSAGE_LOG = 10,       -- Keep last N messages in display
+    UDP_MESSAGE_PORT = 9003,
+    MAX_MESSAGE_LOG = 10,
+    MAX_PEERS_DISPLAY = 5
 }
 
 -- Test runner state
 local TestRunner = {
     start_time = os.time(),
-    hostname = io.popen("hostname"):read("*l") or "unknown",
+    hostname = socket.dns.gethostname() or "unknown",
     peers = {},
     stats = {
-        discovery = {sent = 0, received = 0, peers_found = 0, errors = 0},
-        tcp = {sent = 0, received = 0, errors = 0, total_rtt = 0, success = 0},
-        udp = {sent = 0, received = 0, errors = 0, total_rtt = 0, success = 0},
-        uptime = 0
+        discovery = {sent = 0, received = 0, peers_found = 0, dupes = 0, errors = 0},
+        tcp = {sent = 0, received = 0, success = 0, errors = 0, total_rtt = 0},
+        udp = {sent = 0, received = 0, success = 0, errors = 0, total_rtt = 0}
     },
     message_log = {},
     running = true,
     test_sequence = 0,
-    sockets = {}
+    sockets = {},
+    peer_lock = {}
 }
 
--- Color definitions
+-- Improved colorization
 local function colorize(color, text)
-    return colors(color .. text .. "%{reset}")
+    return colors("%{bright}" .. color .. text .. "%{reset}")
 end
 
--- Utility functions
+-- Enhanced utilities
 local function get_uptime()
     return os.time() - TestRunner.start_time
 end
 
 local function format_uptime(seconds)
-    local hours = math.floor(seconds / 3600)
-    local minutes = math.floor((seconds % 3600) / 60)
-    local secs = seconds % 60
-    return string.format("%dh %dm %ds", hours, minutes, secs)
+    if seconds < 60 then
+        return string.format("%ds", seconds)
+    elseif seconds < 3600 then
+        return string.format("%dm %ds", math.floor(seconds/60), seconds%60)
+    else
+        return string.format("%dh %dm", math.floor(seconds/3600), (seconds%3600)/60)
+    end
 end
 
 local function get_local_ip()
-    local socket = require("socket")
     local udp = socket.udp()
-    udp:setpeername("8.8.8.8", 80)
+    udp:setpeername("8.8.8.8", 53)
     local ip, _ = udp:getsockname()
     udp:close()
     return ip or "127.0.0.1"
 end
 
-local function log_message(type, direction, peer, message, rtt)
-    local timestamp = os.date("[%H:%M:%S]")
-    local color_map = {
-        discovery = "%{cyan}",
-        tcp = "%{green}",
-        udp = "%{blue}",
-        error = "%{red}"
-    }
-    
-    local arrow = direction == "sent" and "→" or "←"
-    local rtt_str = rtt and string.format(" | RTT: %dms", rtt) or ""
-    local log_entry = {
-        timestamp = timestamp,
-        type = type,
-        direction = direction,
-        peer = peer,
-        message = message,
-        rtt = rtt,
-        formatted = string.format("%s %s%s%s %s: %s%s", 
-            timestamp, 
-            color_map[type] or "%{white}",
-            type:upper(),
-            "%{reset}",
-            arrow,
-            peer,
-            message,
-            rtt_str
-        )
-    }
-    
-    table.insert(TestRunner.message_log, 1, log_entry)
-    if #TestRunner.message_log > TEST_CONFIG.MAX_MESSAGE_LOG then
-        table.remove(TestRunner.message_log)
-    end
-end
-
--- Socket initialization
+-- Socket initialization with error handling
 local function init_sockets()
-    -- UDP Discovery socket
-    TestRunner.sockets.discovery_send = socket.udp()
-    TestRunner.sockets.discovery_send:setsockname("*", 0)
-    TestRunner.sockets.discovery_send:setoption("broadcast", true)
-    TestRunner.sockets.discovery_send:settimeout(0)
-    
-    TestRunner.sockets.discovery_recv = socket.udp()
-    TestRunner.sockets.discovery_recv:setsockname("*", TEST_CONFIG.UDP_DISCOVERY_PORT)
-    TestRunner.sockets.discovery_recv:settimeout(0)
-    
-    -- UDP Messaging socket
-    TestRunner.sockets.udp_msg_send = socket.udp()
-    TestRunner.sockets.udp_msg_send:setsockname("*", 0)
-    TestRunner.sockets.udp_msg_send:settimeout(0)
-    
-    TestRunner.sockets.udp_msg_recv = socket.udp()
-    TestRunner.sockets.udp_msg_recv:setsockname("*", TEST_CONFIG.UDP_MESSAGE_PORT)
-    TestRunner.sockets.udp_msg_recv:settimeout(0)
-    
+    -- UDP Discovery
+    local ok, err = xpcall(function()
+        TestRunner.sockets.discovery_send = socket.udp()
+        TestRunner.sockets.discovery_send:setsockname("*", 0)
+        TestRunner.sockets.discovery_send:setoption("broadcast", true)
+        TestRunner.sockets.discovery_send:settimeout(0)
+        
+        TestRunner.sockets.discovery_recv = socket.udp()
+        TestRunner.sockets.discovery_recv:setsockname("*", TEST_CONFIG.UDP_DISCOVERY_PORT)
+        TestRunner.sockets.discovery_recv:settimeout(0)
+    end, debug.traceback)
+
+    if not ok then
+        logger.error("Discovery socket init failed: " .. (err or "unknown"))
+    end
+
+    -- UDP Messaging
+    ok, err = xpcall(function()
+        TestRunner.sockets.udp_msg_send = socket.udp()
+        TestRunner.sockets.udp_msg_send:setsockname("*", 0)
+        TestRunner.sockets.udp_msg_send:settimeout(0)
+        
+        TestRunner.sockets.udp_msg_recv = socket.udp()
+        TestRunner.sockets.udp_msg_recv:setsockname("*", TEST_CONFIG.UDP_MESSAGE_PORT)
+        TestRunner.sockets.udp_msg_recv:settimeout(0)
+    end, debug.traceback)
+
+    if not ok then
+        logger.error("UDP messaging socket init failed: " .. (err or "unknown"))
+    end
+
     logger.info("Test sockets initialized")
 end
 
--- Peer management
+-- Peer management with deduplication
 local function update_peer(ip, port, peer_data)
     local peer_id = ip .. ":" .. port
+    
+    -- Prevent duplicate processing
+    if TestRunner.peer_lock[peer_id] and TestRunner.peer_lock[peer_id] > os.time() - 1 then
+        TestRunner.stats.discovery.dupes = TestRunner.stats.discovery.dupes + 1
+        return
+    end
+    
+    TestRunner.peer_lock[peer_id] = os.time()
+    
     if not TestRunner.peers[peer_id] then
         TestRunner.peers[peer_id] = {
             ip = ip,
             port = port,
             first_seen = os.time(),
+            last_seen = os.time(),
             hostname = peer_data.hostname or "unknown",
             status = "online"
         }
         TestRunner.stats.discovery.peers_found = TestRunner.stats.discovery.peers_found + 1
         log_message("discovery", "received", peer_id, "New peer discovered", nil)
+    else
+        TestRunner.peers[peer_id].last_seen = os.time()
+        TestRunner.peers[peer_id].status = "online"
     end
-    
-    TestRunner.peers[peer_id].last_seen = os.time()
-    TestRunner.peers[peer_id].status = "online"
 end
 
 local function check_peer_timeouts()
@@ -159,7 +146,7 @@ local function check_peer_timeouts()
     end
 end
 
--- Discovery service testing
+-- Robust discovery service
 local function send_discovery_broadcast()
     local discovery_msg = {
         type = "discovery_test",
@@ -193,7 +180,7 @@ local function listen_discovery()
     end
 end
 
--- TCP testing
+-- TCP testing with better error handling
 local function send_tcp_test(peer_id, peer)
     TestRunner.test_sequence = TestRunner.test_sequence + 1
     local test_msg = {
@@ -204,8 +191,21 @@ local function send_tcp_test(peer_id, peer)
         from = TestRunner.hostname
     }
     
+    local tcp_socket = socket.tcp()
     local start_time = socket.gettime()
-    local success, err = message_writer.send_message(peer.ip, peer.port, json.encode(test_msg))
+    
+    local success, err = xpcall(function()
+        tcp_socket:settimeout(2)
+        tcp_socket:connect(peer.ip, peer.port)
+        tcp_socket:send(json.encode(test_msg) .. "\n")
+        local chunk, status = tcp_socket:receive()
+        tcp_socket:close()
+        return chunk ~= nil
+    end, function(err)
+        tcp_socket:close()
+        return false, err
+    end)
+    
     local rtt = math.floor((socket.gettime() - start_time) * 1000)
     
     if success then
@@ -214,12 +214,13 @@ local function send_tcp_test(peer_id, peer)
         TestRunner.stats.tcp.total_rtt = TestRunner.stats.tcp.total_rtt + rtt
         log_message("tcp", "sent", peer_id, "Ping test message", rtt)
     else
+        TestRunner.stats.tcp.sent = TestRunner.stats.tcp.sent + 1
         TestRunner.stats.tcp.errors = TestRunner.stats.tcp.errors + 1
-        log_message("error", "sent", peer_id, "TCP failed: " .. (err or "unknown"), nil)
+        log_message("error", "sent", peer_id, "TCP failed: " .. (err or "timeout"), nil)
     end
 end
 
--- UDP messaging testing (will fail until implemented)
+-- UDP testing with proper cleanup
 local function send_udp_test(peer_id, peer)
     TestRunner.test_sequence = TestRunner.test_sequence + 1
     local test_msg = {
@@ -241,6 +242,7 @@ local function send_udp_test(peer_id, peer)
         TestRunner.stats.udp.total_rtt = TestRunner.stats.udp.total_rtt + rtt
         log_message("udp", "sent", peer_id, "UDP test message", rtt)
     else
+        TestRunner.stats.udp.sent = TestRunner.stats.udp.sent + 1
         TestRunner.stats.udp.errors = TestRunner.stats.udp.errors + 1
         log_message("error", "sent", peer_id, "UDP failed: " .. (err or "unknown"), nil)
     end
@@ -257,18 +259,18 @@ local function listen_udp_messages()
     end
 end
 
--- Display system
+-- Enhanced display system
 local function clear_screen()
-    os.execute("clear")
+    io.write("\027[H\027[2J")
 end
 
 local function draw_header()
     local uptime = get_uptime()
     TestRunner.stats.uptime = uptime
     
-    print(colorize("%{bright}%{white}", string.rep("═", 80)))
-    print(colorize("%{bright}%{cyan}", string.format("        🚀 GabbyLua Continuous Network Test - Running %s", format_uptime(uptime))))
-    print(colorize("%{bright}%{white}", string.rep("═", 80)))
+    print(colorize("%{white}", string.rep("═", 80)))
+    print(colorize("%{cyan}", string.format("        🚀 GabbyLua Network Test - Running %s", format_uptime(uptime))))
+    print(colorize("%{white}", string.rep("═", 80)))
     
     local status_tcp = TestRunner.stats.tcp.sent > 0 and TestRunner.stats.tcp.errors < TestRunner.stats.tcp.sent and "✓" or "✗"
     local status_udp = TestRunner.stats.udp.sent > 0 and TestRunner.stats.udp.errors < TestRunner.stats.udp.sent and "✓" or "✗"
@@ -286,102 +288,41 @@ local function draw_header()
 end
 
 local function draw_peers()
-    local peer_count = 0
+    local online_count = 0
+    local offline_count = 0
     for _, peer in pairs(TestRunner.peers) do
-        if peer.status == "online" then peer_count = peer_count + 1 end
+        if peer.status == "online" then online_count = online_count + 1 end
+        if peer.status == "offline" then offline_count = offline_count + 1 end
     end
     
-    print(colorize("%{bright}%{blue}", string.format("📡 DISCOVERED PEERS (%d) - Auto-refresh every %ds:", peer_count, TEST_CONFIG.DISCOVERY_INTERVAL)))
+    print(colorize("%{blue}", string.format("📡 DISCOVERED PEERS (%d online, %d offline) - Refresh every %ds:",
+        online_count, offline_count, TEST_CONFIG.DISCOVERY_INTERVAL)))
     
-    if peer_count == 0 then
-        print(colorize("%{yellow}", "  └─ No active peers discovered yet..."))
-    else
-        for peer_id, peer in pairs(TestRunner.peers) do
-            local status_icon = peer.status == "online" and "🟢" or "🔴"
-            local alive_time = format_uptime(os.time() - peer.first_seen)
-            local last_seen = peer.status == "online" and "Active" or string.format("Lost %ds ago", os.time() - peer.last_seen)
-            
-            print(string.format("  └─ %s %s (%s) - %s %s", 
-                status_icon,
-                peer.hostname,
-                peer_id,
-                last_seen,
-                peer.status == "online" and "| Alive " .. alive_time or "| Retrying..."
-            ))
+    local displayed = 0
+    for peer_id, peer in pairs(TestRunner.peers) do
+        if displayed >= TEST_CONFIG.MAX_PEERS_DISPLAY then
+            print(colorize("%{yellow}", string.format("  └─ ... and %d more peers", 
+                (online_count + offline_count) - TEST_CONFIG.MAX_PEERS_DISPLAY)))
+            break
         end
+        
+        local status_icon = peer.status == "online" and "🟢" or "🔴"
+        local alive_time = format_uptime(os.time() - peer.first_seen)
+        local last_seen = peer.status == "online" and "Active" or string.format("Lost %ds ago", os.time() - peer.last_seen)
+        
+        print(string.format("  └─ %s %s (%s) - %s %s", 
+            status_icon,
+            peer.hostname,
+            peer_id,
+            last_seen,
+            peer.status == "online" and "| Alive " .. alive_time or "| Last seen " .. format_uptime(os.time() - peer.last_seen)
+        ))
+        displayed = displayed + 1
     end
     print()
 end
 
-local function draw_messages()
-    print(colorize("%{bright}%{magenta}", string.format("📨 CONTINUOUS MESSAGE STREAM (Last %d):", TEST_CONFIG.MAX_MESSAGE_LOG)))
-    
-    if #TestRunner.message_log == 0 then
-        print(colorize("%{yellow}", "  └─ No messages yet..."))
-    else
-        for i, log_entry in ipairs(TestRunner.message_log) do
-            print("  " .. log_entry.formatted)
-        end
-    end
-    print()
-end
-
-local function draw_stats()
-    local uptime = TestRunner.stats.uptime
-    local tcp_avg_rtt = TestRunner.stats.tcp.success > 0 and math.floor(TestRunner.stats.tcp.total_rtt / TestRunner.stats.tcp.success) or 0
-    local udp_avg_rtt = TestRunner.stats.udp.success > 0 and math.floor(TestRunner.stats.udp.total_rtt / TestRunner.stats.udp.success) or 0
-    local tcp_success_rate = TestRunner.stats.tcp.sent > 0 and (TestRunner.stats.tcp.success / TestRunner.stats.tcp.sent * 100) or 0
-    local udp_success_rate = TestRunner.stats.udp.sent > 0 and (TestRunner.stats.udp.success / TestRunner.stats.udp.sent * 100) or 0
-    
-    print(colorize("%{bright}%{green}", "📊 CONTINUOUS STATS (Live counters):"))
-    print(string.format("  ⏱️  Runtime: %s | TCP: %d sent | UDP: %d sent | Discovered: %d peers",
-        format_uptime(uptime),
-        TestRunner.stats.tcp.sent,
-        TestRunner.stats.udp.sent,
-        TestRunner.stats.discovery.peers_found
-    ))
-    print(string.format("  🔄 Discovery: %d sent | %d received | Errors: %d",
-        TestRunner.stats.discovery.sent,
-        TestRunner.stats.discovery.received,
-        TestRunner.stats.discovery.errors
-    ))
-    print(string.format("  🟢 TCP: %d sent | %d received | Success: %.1f%% | Avg RTT: %dms | Errors: %d",
-        TestRunner.stats.tcp.sent,
-        TestRunner.stats.tcp.received,
-        tcp_success_rate,
-        tcp_avg_rtt,
-        TestRunner.stats.tcp.errors
-    ))
-    print(string.format("  🔵 UDP: %d sent | %d received | Success: %.1f%% | Avg RTT: %dms | Errors: %d",
-        TestRunner.stats.udp.sent,
-        TestRunner.stats.udp.received,
-        udp_success_rate,
-        udp_avg_rtt,
-        TestRunner.stats.udp.errors
-    ))
-    print()
-end
-
-local function draw_active_tests()
-    print(colorize("%{bright}%{yellow}", "🎯 ACTIVE CONTINUOUS TESTS:"))
-    print(string.format("  ✅ Discovery heartbeat every %ds", TEST_CONFIG.DISCOVERY_INTERVAL))
-    print(string.format("  ✅ TCP ping/pong every %ds", TEST_CONFIG.TCP_TEST_INTERVAL))
-    print(string.format("  ✅ UDP message test every %ds", TEST_CONFIG.UDP_TEST_INTERVAL))
-    print("  📈 Performance monitoring | " .. colorize("%{green}", "Running..."))
-    print()
-    print(colorize("%{yellow}", "Press Ctrl+C to stop and see final report"))
-end
-
-local function update_display()
-    clear_screen()
-    draw_header()
-    draw_peers()
-    draw_messages()
-    draw_stats()
-    draw_active_tests()
-end
-
--- Main test loops with timing
+-- Main test loop with better timing
 local last_discovery = 0
 local last_tcp_test = 0
 local last_udp_test = 0
@@ -430,75 +371,25 @@ local function run_continuous_tests()
     end
 end
 
--- Signal handling for clean shutdown
-local function setup_signal_handler()
-    -- This is a simple approach - in production you might want more sophisticated signal handling
-    local function cleanup()
-        TestRunner.running = false
-        clear_screen()
-        print(colorize("%{bright}%{green}", "🏁 GabbyLua Continuous Test - Final Report"))
-        print(colorize("%{bright}%{white}", string.rep("═", 60)))
-        print(string.format("Total Runtime: %s", format_uptime(get_uptime())))
-        print(string.format("Peers Discovered: %d", TestRunner.stats.discovery.peers_found))
-        print(string.format("TCP Messages: %d sent, %d errors (%.1f%% success)", 
-            TestRunner.stats.tcp.sent, 
-            TestRunner.stats.tcp.errors,
-            TestRunner.stats.tcp.sent > 0 and ((TestRunner.stats.tcp.sent - TestRunner.stats.tcp.errors) / TestRunner.stats.tcp.sent * 100) or 0
-        ))
-        print(string.format("UDP Messages: %d sent, %d errors (%.1f%% success)", 
-            TestRunner.stats.udp.sent, 
-            TestRunner.stats.udp.errors,
-            TestRunner.stats.udp.sent > 0 and ((TestRunner.stats.udp.sent - TestRunner.stats.udp.errors) / TestRunner.stats.udp.sent * 100) or 0
-        ))
-        print(colorize("%{bright}%{cyan}", "Thank you for testing GabbyLua! 🚀"))
-        
-        -- Close sockets
-        for name, sock in pairs(TestRunner.sockets) do
-            if sock then sock:close() end
-        end
-        
-        logger.close()
-        os.exit(0)
-    end
-    
-    -- Set up basic Ctrl+C handling
-    signal = pcall(require, "signal")
-    if signal then
-        signal.signal(signal.SIGINT, cleanup)
-    end
-    
-    return cleanup
-end
-
 -- Main execution
 local function main()
-    print(colorize("%{bright}%{green}", "🚀 Starting GabbyLua Continuous Test..."))
-    print(colorize("%{yellow}", "Installing ansicolors if needed..."))
+    -- Install ansicolors if needed
     os.execute("luarocks install ansicolors --quiet 2>/dev/null")
-    
-    local cleanup = setup_signal_handler()
     
     -- Initialize
     init_sockets()
     
-    print(colorize("%{green}", "✅ Test environment ready!"))
-    print(colorize("%{cyan}", "Testing TCP (implemented), Discovery & UDP messaging (not implemented yet)"))
-    print(colorize("%{yellow}", "Press Ctrl+C to stop"))
-    socket.sleep(2)
-    
     -- Main test loop
     while TestRunner.running do
-        local ok, err = pcall(run_continuous_tests)
+        local ok, err = xpcall(run_continuous_tests, debug.traceback)
         if not ok then
             logger.error("Test loop error: " .. tostring(err))
             socket.sleep(1)
         else
-            socket.sleep(0.1) -- Small sleep to prevent excessive CPU usage
+            socket.sleep(0.1)
         end
     end
-    
-    cleanup()
 end
 
--- Execute
+-- Start the test
 main()
